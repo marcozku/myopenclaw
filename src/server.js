@@ -498,7 +498,7 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
           token,
           groupPolicy: "allowlist",
           dm: {
-            policy: "pairing",
+            policy: "open",
           },
         };
         const set = await runCmd(
