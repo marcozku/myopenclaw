@@ -306,8 +306,7 @@ app.get("/setup/api/status", requireSetupAuth, async (_req, res) => {
       { value: "openai-api-key", label: "OpenAI API key" }
     ]},
     { value: "anthropic", label: "Anthropic", hint: "Claude Code CLI + API key", options: [
-      { value: "claude-cli", label: "Anthropic token (Claude Code CLI)" },
-      { value: "token", label: "Anthropic token (paste setup-token)" },
+      { value: "token", label: "Anthropic token (setup-token)" },
       { value: "apiKey", label: "Anthropic API key" }
     ]},
     { value: "google", label: "Google", hint: "Gemini API key + OAuth", options: [
