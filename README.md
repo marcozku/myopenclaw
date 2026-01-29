@@ -45,6 +45,10 @@ Then:
 - Complete setup
 - Visit `https://<your-app>.up.railway.app/` and `/clawdbot`
 
+- If you're setting custom domain, then set PORT as 8080
+  <img width="611" height="452" alt="image" src="https://github.com/user-attachments/assets/31b0cda7-0976-4ba1-bee2-9db45886ab90" />
+
+
 ## Getting chat tokens (so you don’t have to scramble)
 
 ### Telegram bot token
