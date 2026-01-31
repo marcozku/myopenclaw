@@ -35,6 +35,14 @@ RUN set -eux; \
     sed -i -E 's/"openclaw"[[:space:]]*:[[:space:]]*"workspace:[^"]+"/"openclaw": "*"/g' "$f"; \
   done
 
+# Patch: Fix Moonshot API endpoint for international deployments
+# Change from China endpoint (api.moonshot.cn) to international endpoint (api.moonshot.ai)
+RUN set -eux; \
+  if [ -f "./src/commands/onboard-auth.models.ts" ]; then \
+    sed -i 's|https://api.moonshot.cn/v1|https://api.moonshot.ai/v1|g' ./src/commands/onboard-auth.models.ts; \
+    echo "[patch] Updated Moonshot API endpoint to international version"; \
+  fi
+
 RUN pnpm install --no-frozen-lockfile
 RUN pnpm build
 ENV OPENCLAW_PREFER_PNPM=1
