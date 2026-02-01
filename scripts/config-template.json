@@ -1,0 +1,171 @@
+{
+  "meta": {
+    "version": "enhanced-glm-v1.0",
+    "description": "Enhanced OpenClaw configuration for GLM-4.7 with pre-installed tools",
+    "lastUpdated": "2026-02-01"
+  },
+  "auth": {
+    "profiles": {
+      "zai:default": {
+        "provider": "zai",
+        "mode": "api_key"
+      }
+    }
+  },
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "zai/glm-4.7"
+      },
+      "models": {
+        "zai/glm-4.7": {
+          "alias": "GLM",
+          "temperature": 0.7,
+          "maxTokens": 4096,
+          "systemPrompt": "You are an advanced AI assistant with access to many pre-installed tools. When users ask you to perform tasks, check if there are pre-installed tools in /data/tools/bin or Python libraries that can help. Always try to use existing tools before saying you cannot do something. Available tools include: ffmpeg (video/audio), imagemagick (images), yt-dlp (downloads), pandas (data), requests (web), and many more. Be proactive and creative in using these tools."
+        }
+      },
+      "workspace": "/data/workspace",
+      "compaction": {
+        "mode": "auto"
+      },
+      "maxConcurrent": 6,
+      "subagents": {
+        "maxConcurrent": 12,
+        "enabled": true
+      },
+      "memory": {
+        "enabled": true,
+        "storePath": "/data/.openclaw/memory"
+      },
+      "skills": {
+        "searchPaths": [
+          "/data/skills/custom",
+          "/data/workspace/examples"
+        ],
+        "autoLoad": true
+      }
+    }
+  },
+  "messages": {
+    "ackReactionScope": "group-mentions",
+    "enableRichFormatting": true
+  },
+  "commands": {
+    "native": "auto",
+    "nativeSkills": "auto",
+    "customCommands": {
+      "help-tools": {
+        "description": "显示所有可用的预装工具",
+        "action": "list_installed_tools"
+      },
+      "help-skills": {
+        "description": "显示所有可用的技能",
+        "action": "list_available_skills"
+      }
+    }
+  },
+  "channels": {
+    "discord": {
+      "enabled": true,
+      "groupPolicy": "open",
+      "dm": {
+        "policy": "pairing"
+      },
+      "features": {
+        "voice": {
+          "enabled": true,
+          "autoJoin": false
+        },
+        "files": {
+          "enabled": true,
+          "maxSize": "25MB",
+          "allowedTypes": ["image/*", "audio/*", "video/*", "application/pdf", "text/*"]
+        },
+        "reactions": {
+          "enabled": true
+        },
+        "embeds": {
+          "enabled": true
+        }
+      },
+      "permissions": {
+        "adminRoles": [],
+        "moderatorRoles": [],
+        "allowedChannels": []
+      }
+    }
+  },
+  "gateway": {
+    "port": 8080,
+    "mode": "public",
+    "bind": "0.0.0.0",
+    "cors": {
+      "enabled": true,
+      "origins": ["*"]
+    },
+    "rateLimit": {
+      "enabled": true,
+      "maxRequests": 100,
+      "windowMs": 60000
+    }
+  },
+  "skills": {
+    "install": {
+      "nodeManager": "npm",
+      "pythonManager": "pip3",
+      "autoInstall": false,
+      "installTimeout": 300000
+    },
+    "preinstalled": {
+      "multimedia": {
+        "ffmpeg": "/usr/bin/ffmpeg",
+        "imagemagick": "/usr/bin/convert",
+        "yt-dlp": "/data/tools/bin/yt-dlp"
+      },
+      "python": {
+        "pandas": true,
+        "numpy": true,
+        "requests": true,
+        "beautifulsoup4": true,
+        "pillow": true,
+        "pydub": true
+      },
+      "nodejs": {
+        "axios": true,
+        "sharp": true,
+        "cheerio": true
+      }
+    }
+  },
+  "tools": {
+    "searchPaths": [
+      "/data/tools/bin",
+      "/usr/local/bin",
+      "/usr/bin"
+    ]
+  },
+  "plugins": {
+    "entries": {
+      "discord": {
+        "enabled": true
+      }
+    },
+    "autoLoad": true,
+    "searchPaths": [
+      "/data/skills/custom/plugins"
+    ]
+  },
+  "logging": {
+    "level": "info",
+    "format": "json",
+    "destination": "/data/.openclaw/logs"
+  },
+  "features": {
+    "experimental": {
+      "autoToolDiscovery": true,
+      "contextualMemory": true,
+      "proactiveSkillSuggestions": true
+    }
+  }
+}
