@@ -101,6 +101,7 @@
       whatsappAccessToken: document.getElementById('whatsappAccessToken').value,
       whatsappBusinessAccountId: document.getElementById('whatsappBusinessAccountId').value,
       whatsappVerifyToken: document.getElementById('whatsappVerifyToken').value,
+      whatsappPersonalEnabled: document.getElementById('whatsappPersonalEnabled') ? document.getElementById('whatsappPersonalEnabled').checked : false,
       signalApiUrl: document.getElementById('signalApiUrl').value,
       signalPhoneNumber: document.getElementById('signalPhoneNumber').value,
       signalAccount: document.getElementById('signalAccount').value,
@@ -219,11 +220,11 @@
   var pairingBtn = document.getElementById('pairingApprove');
   if (pairingBtn) {
     pairingBtn.onclick = function () {
-      var channel = prompt('Enter channel (telegram or discord):');
+      var channel = prompt('Enter channel (telegram, discord, or whatsapp-personal):');
       if (!channel) return;
       channel = channel.trim().toLowerCase();
-      if (channel !== 'telegram' && channel !== 'discord') {
-        alert('Channel must be "telegram" or "discord"');
+      if (channel !== 'telegram' && channel !== 'discord' && channel !== 'whatsapp-personal') {
+        alert('Channel must be "telegram", "discord", or "whatsapp-personal"');
         return;
       }
       var code = prompt('Enter pairing code (e.g. 3EY4PUYS):');

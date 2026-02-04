@@ -438,6 +438,12 @@ app.get("/setup", requireSetupAuth, (_req, res) => {
     <h2>2d) Optional: WhatsApp Personal (Normal WhatsApp)</h2>
     <p class="muted">Use your regular WhatsApp account (no Business API required). Scan QR code to connect.</p>
 
+    <label>Enable WhatsApp Personal Channel</label>
+    <div style="margin-bottom: 1rem">
+      <input id="whatsappPersonalEnabled" type="checkbox" value="1" />
+      <span class="muted" style="margin-left: 0.5rem">Check to enable WhatsApp Personal channel after setup</span>
+    </div>
+
     <div style="margin-bottom: 1rem">
       <button id="waPersonalStart" type="button" style="background:#16a34a">Start WhatsApp Personal</button>
       <button id="waPersonalStop" type="button" style="background:#dc2626; margin-left:0.5rem">Stop</button>
@@ -781,6 +787,23 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
       if (cfgObj.recipients && cfgObj.recipients.length > 0) {
         extra += `[signal] Recipients: ${cfgObj.recipients.join(", ")}\n`;
       }
+    }
+
+    // WhatsApp Personal (non-Business) configuration
+    // This uses the whatsapp-web.js integration which is always available in the wrapper
+    const wpPersonalEnabled = payload.whatsappPersonalEnabled === true;
+    if (wpPersonalEnabled) {
+      const cfgObj = {
+        enabled: true,
+        // The wrapper handles the WhatsApp client; gateway just needs to accept messages
+        dmPolicy: "pairing",
+        groupPolicy: "allowlist",
+      };
+
+      const { set, get } = await setConfig("channels.whatsappPersonal", cfgObj);
+      extra += `\n[whatsapp-personal config] exit=${set.code} (output ${set.output.length} chars)\n${set.output || "(no output)"}`;
+      extra += `\n[whatsapp-personal verify] exit=${get.code} (output ${get.output.length} chars)\n${get.output || "(no output)"}`;
+      extra += `[whatsapp-personal] Channel enabled. Use the WhatsApp Personal section below to connect.\n`;
     }
 
     // Apply changes immediately.
