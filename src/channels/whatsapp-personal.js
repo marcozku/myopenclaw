@@ -63,7 +63,13 @@ export async function createClient(sessionId, config = {}, onMessage = null) {
         "--no-first-run",
         "--no-zygote",
         "--disable-gpu",
+        "--disable-features=IsolateOrigins,site-per-process",
+        "--disable-blink-features=AutomationControlled",
+        // Increase memory for headless Chrome
+        "--js-flags=--max-old-space-size=256",
       ],
+      // Increase default timeout
+      defaultViewport: null,
     },
   };
 
@@ -210,21 +216,29 @@ export function getStatus(sessionId) {
  * @param {number} maxWaitMs - Maximum time to wait in ms
  * @returns {Promise<boolean>}
  */
-async function waitForReady(client, sessionId, maxWaitMs = 10000) {
+async function waitForReady(client, sessionId, maxWaitMs = 30000) {
   const start = Date.now();
+  let lastInfo = null;
   while (Date.now() - start < maxWaitMs) {
     if (client.isReady) {
       // Additional check: ensure client.info is available
       try {
-        if (client.info && client.info.wid) {
+        const info = client.info;
+        if (info && info.wid) {
+          console.log(`[whatsapp:${sessionId}] Client fully ready, user: ${info.pushname} (${info.wid.user})`);
           return true;
         }
-      } catch {
+        lastInfo = info;
+      } catch (e) {
         // info not ready yet
+        if (Date.now() - start > 5000) {
+          console.log(`[whatsapp:${sessionId}] Still waiting for client info... (${Math.round((Date.now() - start) / 1000)}s)`);
+        }
       }
     }
     await new Promise(resolve => setTimeout(resolve, 500));
   }
+  console.error(`[whatsapp:${sessionId}] Client ready timeout. isReady=${client.isReady}, info=${lastInfo ? 'exists' : 'null'}`);
   return false;
 }
 
@@ -242,39 +256,46 @@ export async function sendMessage(sessionId, to, message) {
     throw new Error("Client not found");
   }
 
-  // Wait for client to be fully ready
-  const isReady = await waitForReady(client, sessionId);
+  // Wait for client to be fully ready (increased timeout)
+  console.log(`[whatsapp:${sessionId}] Waiting for client to be ready...`);
+  const isReady = await waitForReady(client, sessionId, 30000);
   if (!isReady || !client.isReady) {
     console.error(`[whatsapp:${sessionId}] Send failed: client not ready after waiting`);
     throw new Error("Client not ready. Please wait a moment after scanning QR code.");
   }
 
-  // Ensure number format
-  let recipient = to;
-  if (!recipient.includes("@")) {
+  // Ensure number format - remove + prefix if present and clean the number
+  let recipient = to.replace(/\D/g, ''); // Remove all non-digits
+  if (recipient.length > 0 && !recipient.includes("@")) {
     // Add @c.us for individual messages
     recipient = `${recipient}@c.us`;
   }
 
-  console.log(`[whatsapp:${sessionId}] Sending message to ${recipient}`);
+  console.log(`[whatsapp:${sessionId}] Sending message to ${recipient}: "${message.substring(0, 50)}..."`);
 
-  // Retry logic for sending
-  const maxRetries = 3;
+  // Retry logic for sending with longer delays
+  const maxRetries = 5;
   let lastError = null;
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      await client.sendMessage(recipient, message);
-      console.log(`[whatsapp:${sessionId}] Message sent successfully`);
-      return { success: true, recipient, message };
+      // Use client.getNumberId to get the proper ChatId format
+      const chatId = await client.getNumberId(recipient.replace('@c.us', ''));
+      if (!chatId) {
+        throw new Error(`Could not resolve chat ID for ${recipient}`);
+      }
+
+      const result = await client.sendMessage(chatId._serialized, message);
+      console.log(`[whatsapp:${sessionId}] Message sent successfully, ID: ${result.id.id}`);
+      return { success: true, recipient, message, messageId: result.id.id };
     } catch (err) {
       lastError = err;
       const errorMsg = err?.message || err?.toString?.() || String(err);
       console.error(`[whatsapp:${sessionId}] Send attempt ${attempt}/${maxRetries} error:`, errorMsg);
 
-      // If not the last attempt, wait before retrying
+      // If not the last attempt, wait before retrying (exponential backoff)
       if (attempt < maxRetries) {
-        const delay = attempt * 1000; // 1s, 2s, 3s delays
+        const delay = attempt * 2000; // 2s, 4s, 6s, 8s delays
         console.log(`[whatsapp:${sessionId}] Retrying in ${delay}ms...`);
         await new Promise(resolve => setTimeout(resolve, delay));
       }
