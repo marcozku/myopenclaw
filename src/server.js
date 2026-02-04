@@ -1073,7 +1073,10 @@ app.post("/setup/api/whatsapp-personal/send", requireSetupAuth, async (req, res)
     const result = await wp.sendMessage(WHATSAPP_PERSONAL_SESSION_ID, to, message);
     res.json({ ok: true, ...result });
   } catch (err) {
-    res.status(500).json({ ok: false, error: String(err) });
+    // Log the full error for debugging
+    console.error("[whatsapp-personal] Send error:", err);
+    const errMsg = err?.message || err?.toString() || String(err);
+    res.status(500).json({ ok: false, error: errMsg });
   }
 });
 
