@@ -1,8 +1,32 @@
 # Signal CLI REST API Setup Guide
 
-## Quick Start (Docker - Recommended)
+## Quick Start (Automated - Recommended)
 
-### Option 1: Using docker-compose (Easiest)
+### Windows
+
+Double-click `setup-signal.bat` or run in PowerShell:
+```powershell
+.\setup-signal.bat
+```
+
+### Mac/Linux
+
+```bash
+chmod +x setup-signal.sh
+./setup-signal.sh
+```
+
+The script will:
+1. Check Docker is installed
+2. Pull the signal-cli-rest-api image
+3. Start the container on port 8080
+4. Prompt you to link your Signal number via **QR code** (recommended) or SMS
+
+---
+
+## Manual Setup (Docker)
+
+### Option 1: Using docker-compose
 
 ```bash
 # From this directory, run:
@@ -26,49 +50,46 @@ docker run -d \
   bbernhard/signal-cli-rest-api:latest
 ```
 
+---
+
 ## Link Your Signal Number
 
-After starting the container, you need to register/link your phone number:
+After starting the container, link your Signal account:
 
-### Method 1: REST API
-
-```bash
-# Replace +1234567890 with your actual number
-curl -X POST http://localhost:8080/v1/register/+1234567890
-
-# You'll receive a verification code via SMS
-# Then verify with:
-curl -X POST http://localhost:8080/v1/verify/+1234567890/<CODE>
-```
-
-### Method 2: Docker Exec (Interactive)
-
-```bash
-# Get into the container
-docker exec -it signal-rest-api /bin/sh
-
-# Register your number
-signal-cli -a +1234567890 register
-
-# Verify with code from SMS
-signal-cli -a +1234567890 verify <CODE>
-
-# Exit container
-exit
-```
-
-### Method 3: Link from existing device (No SMS needed)
+### Method 1: QR Code (Recommended - No SMS needed)
 
 If you already have Signal on your phone:
 
 ```bash
-docker exec -it signal-rest-api /bin/sh
-
-# This will show a QR code to scan with your phone
-signal-cli link -n "OpenClaw"
-
-# Scan with: Signal Settings → Linked Devices → Link New Device
+docker exec -it signal-rest-api signal-cli link -n "OpenClaw"
 ```
+
+Then on your phone:
+1. Open Signal
+2. Go to: **Settings → Linked Devices → Link New Device**
+3. Scan the QR code shown
+
+### Method 2: SMS Verification
+
+```bash
+# Register your number (replaces SMS)
+docker exec signal-rest-api signal-cli -a +1234567890 register
+
+# Verify with code from SMS
+docker exec -it signal-rest-api signal-cli -a +1234567890 verify <CODE>
+```
+
+### Method 3: REST API
+
+```bash
+# Register
+curl -X POST http://localhost:8080/v1/register/+1234567890
+
+# Verify
+curl -X POST http://localhost:8080/v1/verify/+1234567890/<CODE>
+```
+
+---
 
 ## Verify Installation
 
@@ -84,6 +105,35 @@ curl -X POST http://localhost:8080/v1/send/+1234567890 \
   -H "Content-Type: application/json" \
   -d '{"message": "Hello from OpenClaw!"}'
 ```
+
+---
+
+## Configure in OpenClaw
+
+Once signal-cli is running and linked:
+
+1. Go to `/setup` page
+2. Scroll to **"2c) Optional: Signal"**
+3. Fill in:
+   - **API URL**: `http://localhost:8080`
+   - **Phone Number**: Your Signal number (`+1234567890`)
+4. Click **Run setup**
+
+**Or use Raw Config** (see [RAW_CONFIG_TEMPLATES.md](RAW_CONFIG_TEMPLATES.md)):
+
+```json5
+{
+  channels: {
+    signal: {
+      enabled: true,
+      apiUrl: "http://localhost:8080",
+      phoneNumber: "+1234567890"
+    }
+  }
+}
+```
+
+---
 
 ## Troubleshooting
 
@@ -109,12 +159,15 @@ docker-compose -f docker-compose.signal.yml up -d --force-recreate
 
 ```bash
 # Stop and remove volume (wipes account data)
-docker-compose -f docker-compose.signal.yml down
-docker volume rm myopenclaw_signal_data
+docker stop signal-rest-api
+docker rm signal-rest-api
+docker volume rm signal_data
 
 # Start fresh
 docker-compose -f docker-compose.signal.yml up -d
 ```
+
+---
 
 ## For Railway Deployment
 
@@ -136,8 +189,25 @@ ngrok http 8080
 
 Deploy signal-cli on a separate server (Railway, Fly.io, etc.) and use that URL in OpenClaw setup.
 
-## Firewall Notes
+---
 
-Make sure port 8080 is accessible:
-- **Local**: No firewall changes needed
-- **Remote**: Open port 8080/tcp or use SSH tunneling
+## Useful Commands
+
+```bash
+# View logs
+docker logs -f signal-rest-api
+
+# Restart container
+docker restart signal-rest-api
+
+# Stop container
+docker stop signal-rest-api
+
+# Start container
+docker start signal-rest-api
+
+# Remove container and data
+docker stop signal-rest-api
+docker rm signal-rest-api
+docker volume rm signal_data
+```
