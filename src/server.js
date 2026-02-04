@@ -436,12 +436,12 @@ app.get("/setup", requireSetupAuth, (_req, res) => {
 
   <div class="card">
     <h2>2d) Optional: WhatsApp Personal (Normal WhatsApp)</h2>
-    <p class="muted">Use your regular WhatsApp account (no Business API required). Scan QR code to connect.</p>
+    <p class="muted">Use your regular WhatsApp account (no Business API required). Scan QR code to connect. This works independently of the gateway configuration.</p>
 
     <label>Enable WhatsApp Personal Channel</label>
     <div style="margin-bottom: 1rem">
       <input id="whatsappPersonalEnabled" type="checkbox" value="1" />
-      <span class="muted" style="margin-left: 0.5rem">Check to enable WhatsApp Personal channel after setup</span>
+      <span class="muted" style="margin-left: 0.5rem">Check to enable WhatsApp Personal (works independently, no gateway config needed)</span>
     </div>
 
     <div style="margin-bottom: 1rem">
@@ -790,20 +790,19 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
     }
 
     // WhatsApp Personal (non-Business) configuration
-    // This uses the whatsapp-web.js integration which is always available in the wrapper
+    // The wrapper handles the WhatsApp client; messages are forwarded directly to gateway.
+    // We store the enabled state in a separate file since gateway doesn't support this channel.
     const wpPersonalEnabled = payload.whatsappPersonalEnabled === true;
     if (wpPersonalEnabled) {
-      const cfgObj = {
-        enabled: true,
-        // The wrapper handles the WhatsApp client; gateway just needs to accept messages
-        dmPolicy: "pairing",
-        groupPolicy: "allowlist",
-      };
-
-      const { set, get } = await setConfig("channels.whatsappPersonal", cfgObj);
-      extra += `\n[whatsapp-personal config] exit=${set.code} (output ${set.output.length} chars)\n${set.output || "(no output)"}`;
-      extra += `\n[whatsapp-personal verify] exit=${get.code} (output ${get.output.length} chars)\n${get.output || "(no output)"}`;
-      extra += `[whatsapp-personal] Channel enabled. Use the WhatsApp Personal section below to connect.\n`;
+      // Store enabled state in wrapper config (not gateway config)
+      const wpPersonalConfigPath = path.join(STATE_DIR, "whatsapp-personal.json");
+      try {
+        fs.mkdirSync(STATE_DIR, { recursive: true });
+        fs.writeFileSync(wpPersonalConfigPath, JSON.stringify({ enabled: true }, null, 2));
+        extra += `[whatsapp-personal] Channel enabled in wrapper. Use the WhatsApp Personal section below to connect.\n`;
+      } catch (err) {
+        extra += `[whatsapp-personal] Warning: could not save config: ${err.message}\n`;
+      }
     }
 
     // Apply changes immediately.
@@ -1022,24 +1021,46 @@ app.get("/setup/api/whatsapp-personal/status", requireSetupAuth, async (_req, re
 app.post("/setup/api/whatsapp-personal/start", requireSetupAuth, async (req, res) => {
   try {
     const wp = await getWhatsappPersonal();
-    const webhookUrl = `https://${process.env.RAILWAY_PUBLIC_DOMAIN || req.headers.host || "localhost"}/webhook/whatsapp-personal`;
 
     const result = await wp.createClient(
       WHATSAPP_PERSONAL_SESSION_ID,
-      { webhookUrl },
+      {},
       async (messageData) => {
         // Default message handler - log to console
         console.log("[whatsapp-personal] Received message:", JSON.stringify(messageData, null, 2));
 
-        // Forward to OpenClaw gateway if configured
+        // Forward to OpenClaw gateway's webhook endpoint
+        // The gateway will handle this as an incoming message from the user
         try {
-          await fetch(`${GATEWAY_TARGET}/webhook/whatsapp-personal`, {
+          const gatewayPayload = {
+            channel: "web",
+            // Use the WhatsApp number as the user identifier
+            userId: `whatsapp-personal:${messageData.fromNumber}`,
+            userName: messageData.fromName || messageData.fromNumber,
+            // The actual message text
+            text: messageData.body || "",
+            // Include metadata for reference
+            _meta: {
+              source: "whatsapp-personal",
+              from: messageData.from,
+              fromNumber: messageData.fromNumber,
+              timestamp: messageData.timestamp,
+              messageType: messageData.messageType,
+              isGroup: messageData.isGroup,
+            },
+          };
+
+          await fetch(`${GATEWAY_TARGET}/webhook/browser`, {
             method: "POST",
-            headers: { "Content-Type": "application/json", "X-Gateway-Token": OPENCLAW_GATEWAY_TOKEN },
-            body: JSON.stringify(messageData),
+            headers: {
+              "Content-Type": "application/json",
+              "X-Gateway-Token": OPENCLAW_GATEWAY_TOKEN,
+            },
+            body: JSON.stringify(gatewayPayload),
           });
-        } catch {
-          // Gateway might not handle this endpoint yet
+          console.log("[whatsapp-personal] Message forwarded to gateway");
+        } catch (err) {
+          console.error("[whatsapp-personal] Failed to forward to gateway:", err.message);
         }
       }
     );
@@ -1080,10 +1101,29 @@ app.post("/setup/api/whatsapp-personal/send", requireSetupAuth, async (req, res)
   }
 });
 
-// Public webhook endpoint for WhatsApp Personal messages (no auth, called by whatsapp-web.js locally)
-app.post("/webhook/whatsapp-personal", express.json({ type: "*/*" }), async (req, res) => {
-  // Just acknowledge receipt
-  res.json({ received: true });
+// Internal endpoint for gateway to send WhatsApp messages (called by tools/functions)
+// This is authenticated with gateway token
+app.post("/__internal/whatsapp-personal/send", express.json(), async (req, res) => {
+  try {
+    // Verify gateway token
+    const authHeader = req.headers["x-gateway-token"] || "";
+    if (authHeader !== OPENCLAW_GATEWAY_TOKEN) {
+      return res.status(401).json({ ok: false, error: "Unauthorized" });
+    }
+
+    const wp = await getWhatsappPersonal();
+    const { to, message } = req.body || {};
+    if (!to || !message) {
+      return res.status(400).json({ ok: false, error: "Missing 'to' or 'message'" });
+    }
+
+    const result = await wp.sendMessage(WHATSAPP_PERSONAL_SESSION_ID, to, message);
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    console.error("[whatsapp-personal] Gateway send error:", err);
+    const errMsg = err?.message || err?.toString() || String(err);
+    res.status(500).json({ ok: false, error: errMsg });
+  }
 });
 
 app.get("/setup/export", requireSetupAuth, async (_req, res) => {
