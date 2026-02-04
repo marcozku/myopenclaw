@@ -1,7 +1,8 @@
 // WhatsApp Personal Channel Handler using whatsapp-web.js
 // This allows using a regular WhatsApp account (not Business API)
 
-import { Client, LocalAuth } from "whatsapp-web.js";
+import pkg from "whatsapp-web.js";
+const { Client, LocalAuth } = pkg;
 import qrcode from "qrcode-terminal";
 import fs from "node:fs";
 import path from "node:path";
