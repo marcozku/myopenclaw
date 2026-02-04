@@ -184,6 +184,20 @@ async function startGateway() {
 async function ensureGatewayRunning() {
   if (!isConfigured()) return { ok: false, reason: "not configured" };
   if (gatewayProc) return { ok: true };
+
+  // Ensure trustedProxies is configured for Railway and similar platforms
+  // This must be set before gateway starts so it correctly identifies proxied connections
+  await runCmd(OPENCLAW_NODE, clawArgs(["config", "set", "--json", "gateway.trustedProxies", JSON.stringify([
+    "127.0.0.1",
+    "::1",
+    "link-local",
+    "unix:",
+    // Railway's proxy IPs (CGNAT space)
+    "100.64.0.0/10",
+    // Also trust any connection from localhost (handled by proxy's X-Forwarded-For)
+    "loopback"
+  ])]));
+
   if (!gatewayStarting) {
     gatewayStarting = (async () => {
       await startGateway();
