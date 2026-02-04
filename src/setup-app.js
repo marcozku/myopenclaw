@@ -283,7 +283,13 @@
       waPersonalLog('Auth failure: ' + data.authFailure);
     }
     if (data.qr && waPersonalQr) {
-      waPersonalQr.textContent = data.qr;
+      // Check if QR is a data URL (image) or raw text
+      if (data.qr.startsWith('data:image')) {
+        waPersonalQr.innerHTML = '<img src="' + data.qr + '" alt="QR Code" style="width: 250px; height: 250px; display: block; margin: 0 auto;" />';
+      } else {
+        // Fallback to text display (e.g., use an external QR service)
+        waPersonalQr.innerHTML = '<img src="https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=' + encodeURIComponent(data.qr) + '" alt="QR Code" style="width: 250px; height: 250px; display: block; margin: 0 auto;" />';
+      }
       if (waPersonalQrContainer) waPersonalQrContainer.style.display = 'block';
     }
   }

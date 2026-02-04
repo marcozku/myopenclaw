@@ -451,7 +451,7 @@ app.get("/setup", requireSetupAuth, (_req, res) => {
 
     <div id="waPersonalQrContainer" style="display:none; margin-bottom:1rem">
       <label>QR Code (Scan with WhatsApp)</label>
-      <pre id="waPersonalQr" style="background:#fff; padding:1rem; border:1px solid #ddd; border-radius:8px; font-size:10px; line-height:1.2; white-space:pre; overflow-x:auto"></pre>
+      <div id="waPersonalQr" style="background:#fff; padding:1rem; border:1px solid #ddd; border-radius:8px; display:flex; justify-content:center; align-items:center; min-height:270px"></div>
       <div class="muted">Open WhatsApp on your phone: Settings > Linked Devices > Link a Device</div>
     </div>
 

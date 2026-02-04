@@ -3,7 +3,8 @@
 
 import pkg from "whatsapp-web.js";
 const { Client, LocalAuth } = pkg;
-import qrcode from "qrcode-terminal";
+import qrcode from "qrcode";
+import qrcodeTerminal from "qrcode-terminal";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -71,11 +72,16 @@ export async function createClient(sessionId, config = {}, onMessage = null) {
   }
 
   // QR Code event - needs to be scanned
-  client.on("qr", (qr) => {
+  client.on("qr", async (qr) => {
     console.log(`[whatsapp:${sessionId}] QR Code received. Scan with WhatsApp:`);
-    qrcode.generate(qr, { small: true });
-    // Store QR for retrieval via API
-    client.lastQr = qr;
+    qrcodeTerminal.generate(qr, { small: true });
+    // Generate QR code as data URL for web display
+    try {
+      client.lastQr = await qrcode.toDataURL(qr);
+    } catch (err) {
+      console.error(`[whatsapp:${sessionId}] Failed to generate QR data URL:`, err);
+      client.lastQr = qr; // fallback to raw string
+    }
   });
 
   // Ready event - client is authenticated
