@@ -198,6 +198,13 @@ async function ensureGatewayRunning() {
     "loopback"
   ])]));
 
+  // Configure web channel to allow all connections without pairing
+  // This fixes "pairing required" errors when accessing via browser
+  await runCmd(OPENCLAW_NODE, clawArgs(["config", "set", "--json", "channels.web", JSON.stringify({
+    enabled: true,
+    dmPolicy: "all"
+  })]));
+
   if (!gatewayStarting) {
     gatewayStarting = (async () => {
       await startGateway();
