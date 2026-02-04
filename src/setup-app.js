@@ -100,7 +100,11 @@
       telegramToken: document.getElementById('telegramToken').value,
       discordToken: document.getElementById('discordToken').value,
       slackBotToken: document.getElementById('slackBotToken').value,
-      slackAppToken: document.getElementById('slackAppToken').value
+      slackAppToken: document.getElementById('slackAppToken').value,
+      whatsappPhoneNumberId: document.getElementById('whatsappPhoneNumberId').value,
+      whatsappAccessToken: document.getElementById('whatsappAccessToken').value,
+      whatsappBusinessAccountId: document.getElementById('whatsappBusinessAccountId').value,
+      whatsappVerifyToken: document.getElementById('whatsappVerifyToken').value
     };
 
     logEl.textContent = 'Running...\n';

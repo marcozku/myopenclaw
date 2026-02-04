@@ -356,6 +356,38 @@ app.get("/setup", requireSetupAuth, (_req, res) => {
   </div>
 
   <div class="card">
+    <h2>2b) Optional: WhatsApp Business</h2>
+    <p class="muted">Configure WhatsApp Business API integration. Requires a Meta Business account and WhatsApp Business App.</p>
+
+    <label>WhatsApp Phone Number ID (optional)</label>
+    <input id="whatsappPhoneNumberId" type="text" placeholder="123456789012345" />
+
+    <label>WhatsApp Access Token (optional)</label>
+    <input id="whatsappAccessToken" type="password" placeholder="EAAxxxxxxxxxxxxxx" />
+    <div class="muted" style="margin-top: 0.25rem">
+      Get it from Meta for Developers: select your app → WhatsApp → API Setup, then copy the Access Token (temporary) or generate a permanent token.
+    </div>
+
+    <label>WhatsApp Business Account ID (optional)</label>
+    <input id="whatsappBusinessAccountId" type="text" placeholder="123456789012345" />
+    <div class="muted" style="margin-top: 0.25rem">
+      Found in Meta Business Suite → Settings → Business assets. Optional for basic functionality.
+    </div>
+
+    <label>WhatsApp Webhook URL (auto-configured)</label>
+    <input id="whatsappWebhookUrl" type="text" disabled placeholder="Auto-generated after setup" />
+    <div class="muted" style="margin-top: 0.25rem">
+      Configure this URL in your Meta App settings: WhatsApp → Configuration → Webhook.
+    </div>
+
+    <label>WhatsApp Verify Token (optional, for webhook verification)</label>
+    <input id="whatsappVerifyToken" type="text" placeholder="custom_verify_token" />
+    <div class="muted" style="margin-top: 0.25rem">
+      A custom secret token to verify webhook requests. Leave empty to auto-generate.
+    </div>
+  </div>
+
+  <div class="card">
     <h2>3) Run onboarding</h2>
     <button id="run">Run setup</button>
     <button id="pairingApprove" style="background:#1f2937; margin-left:0.5rem">Approve pairing</button>
@@ -612,6 +644,47 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
       }
     }
 
+    // WhatsApp Business API configuration
+    if (payload.whatsappPhoneNumberId?.trim() || payload.whatsappAccessToken?.trim()) {
+      if (!supports("whatsapp")) {
+        extra += "\n[whatsapp] skipped (this openclaw build does not list whatsapp in `channels add --help`)\n";
+      } else {
+        const cfgObj = {
+          enabled: true,
+        };
+
+        if (payload.whatsappPhoneNumberId?.trim()) {
+          cfgObj.phoneNumberId = payload.whatsappPhoneNumberId.trim();
+        }
+        if (payload.whatsappAccessToken?.trim()) {
+          cfgObj.accessToken = payload.whatsappAccessToken.trim();
+        }
+        if (payload.whatsappBusinessAccountId?.trim()) {
+          cfgObj.businessAccountId = payload.whatsappBusinessAccountId.trim();
+        }
+
+        // Auto-generate verify token if not provided
+        const verifyToken = payload.whatsappVerifyToken?.trim() || crypto.randomBytes(16).toString("hex");
+        cfgObj.verifyToken = verifyToken;
+
+        // Set policies for WhatsApp
+        cfgObj.groupPolicy = "allowlist";
+        cfgObj.dm = {
+          policy: "pairing",
+        };
+
+        const set = await runCmd(
+          OPENCLAW_NODE,
+          clawArgs(["config", "set", "--json", "channels.whatsapp", JSON.stringify(cfgObj)]),
+        );
+        const get = await runCmd(OPENCLAW_NODE, clawArgs(["config", "get", "channels.whatsapp"]));
+        extra += `\n[whatsapp config] exit=${set.code} (output ${set.output.length} chars)\n${set.output || "(no output)"}`;
+        extra += `\n[whatsapp verify] exit=${get.code} (output ${get.output.length} chars)\n${get.output || "(no output)"}`;
+        extra += `\n[whatsapp] Verify token: ${verifyToken}\n`;
+        extra += `[whatsapp] Webhook URL: https://${process.env.RAILWAY_PUBLIC_DOMAIN || "your-domain"}/webhook/whatsapp\n`;
+      }
+    }
+
     // Apply changes immediately.
     await restartGateway();
   }
@@ -645,6 +718,7 @@ app.get("/setup/api/debug", requireSetupAuth, async (_req, res) => {
       node: OPENCLAW_NODE,
       version: v.output.trim(),
       channelsAddHelpIncludesTelegram: help.output.includes("telegram"),
+      channelsAddHelpIncludesWhatsapp: help.output.includes("whatsapp"),
     },
   });
 });
