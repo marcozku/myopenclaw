@@ -204,6 +204,31 @@ export function getStatus(sessionId) {
 }
 
 /**
+ * Wait for client to be fully ready
+ * @param {Object} client - WhatsApp client
+ * @param {string} sessionId - Session ID for logging
+ * @param {number} maxWaitMs - Maximum time to wait in ms
+ * @returns {Promise<boolean>}
+ */
+async function waitForReady(client, sessionId, maxWaitMs = 10000) {
+  const start = Date.now();
+  while (Date.now() - start < maxWaitMs) {
+    if (client.isReady) {
+      // Additional check: ensure client.info is available
+      try {
+        if (client.info && client.info.wid) {
+          return true;
+        }
+      } catch {
+        // info not ready yet
+      }
+    }
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+  return false;
+}
+
+/**
  * Send a message
  * @param {string} sessionId
  * @param {string} to - Recipient number (with @c.us suffix)
@@ -216,9 +241,12 @@ export async function sendMessage(sessionId, to, message) {
     console.error(`[whatsapp:${sessionId}] Send failed: client not found`);
     throw new Error("Client not found");
   }
-  if (!client.isReady) {
-    console.error(`[whatsapp:${sessionId}] Send failed: client not ready (isReady=${client.isReady})`);
-    throw new Error("Client not ready. Please scan QR code first.");
+
+  // Wait for client to be fully ready
+  const isReady = await waitForReady(client, sessionId);
+  if (!isReady || !client.isReady) {
+    console.error(`[whatsapp:${sessionId}] Send failed: client not ready after waiting`);
+    throw new Error("Client not ready. Please wait a moment after scanning QR code.");
   }
 
   // Ensure number format
@@ -229,16 +257,33 @@ export async function sendMessage(sessionId, to, message) {
   }
 
   console.log(`[whatsapp:${sessionId}] Sending message to ${recipient}`);
-  try {
-    await client.sendMessage(recipient, message);
-    console.log(`[whatsapp:${sessionId}] Message sent successfully`);
-    return { success: true, recipient, message };
-  } catch (err) {
-    console.error(`[whatsapp:${sessionId}] Send error:`, err);
-    // Extract meaningful error message
-    const errorMsg = err?.message || err?.toString?.() || String(err);
-    throw new Error(`Failed to send message: ${errorMsg}`);
+
+  // Retry logic for sending
+  const maxRetries = 3;
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      await client.sendMessage(recipient, message);
+      console.log(`[whatsapp:${sessionId}] Message sent successfully`);
+      return { success: true, recipient, message };
+    } catch (err) {
+      lastError = err;
+      const errorMsg = err?.message || err?.toString?.() || String(err);
+      console.error(`[whatsapp:${sessionId}] Send attempt ${attempt}/${maxRetries} error:`, errorMsg);
+
+      // If not the last attempt, wait before retrying
+      if (attempt < maxRetries) {
+        const delay = attempt * 1000; // 1s, 2s, 3s delays
+        console.log(`[whatsapp:${sessionId}] Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
   }
+
+  // All retries failed
+  const finalError = lastError?.message || lastError?.toString?.() || String(lastError);
+  throw new Error(`Failed to send message after ${maxRetries} attempts: ${finalError}`);
 }
 
 /**

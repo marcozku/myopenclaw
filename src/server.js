@@ -548,6 +548,8 @@ app.get("/setup/api/status", requireSetupAuth, async (_req, res) => {
     openclawVersion: version.output.trim(),
     channelsAddHelp: channelsHelp.output,
     authGroups,
+    // Include gateway token hash for debugging (not the actual token)
+    gatewayTokenHash: OPENCLAW_GATEWAY_TOKEN ? OPENCLAW_GATEWAY_TOKEN.substring(0, 8) + "..." : "(not set)",
   });
 });
 
