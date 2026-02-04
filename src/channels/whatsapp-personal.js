@@ -15,8 +15,15 @@ const clients = new Map();
 // Message handlers for each client
 const messageHandlers = new Map();
 
-// Ensure sessions directory exists
-fs.mkdirSync(SESSIONS_DIR, { recursive: true });
+// Ensure sessions directory exists (deferred until first use)
+function ensureSessionsDir() {
+  try {
+    fs.mkdirSync(SESSIONS_DIR, { recursive: true });
+  } catch (err) {
+    console.error("[whatsapp-personal] Failed to create sessions dir:", SESSIONS_DIR, err);
+    // Non-fatal - some operations may still work
+  }
+}
 
 /**
  * Create and initialize a WhatsApp client
@@ -26,6 +33,9 @@ fs.mkdirSync(SESSIONS_DIR, { recursive: true });
  * @returns {Promise<Object>} Client info with status
  */
 export async function createClient(sessionId, config = {}, onMessage = null) {
+  // Ensure directory exists before creating client
+  ensureSessionsDir();
+
   if (clients.has(sessionId)) {
     return { success: true, status: "ready", message: "Client already exists" };
   }

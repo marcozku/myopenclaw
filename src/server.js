@@ -8,7 +8,18 @@ import dotenv from "dotenv";
 import express from "express";
 import httpProxy from "http-proxy";
 import * as tar from "tar";
-import * as whatsappPersonal from "./channels/whatsapp-personal.js";
+
+// Log startup for debugging
+console.log("[wrapper] initializing...");
+
+// Lazy-load whatsapp-personal to avoid blocking startup if Puppeteer has issues
+let whatsappPersonal;
+function getWhatsappPersonal() {
+  if (!whatsappPersonal) {
+    whatsappPersonal = import("./channels/whatsapp-personal.js");
+  }
+  return whatsappPersonal;
+}
 
 // Load .env file for local development (Railway sets env vars directly)
 dotenv.config();
@@ -966,9 +977,10 @@ const WHATSAPP_PERSONAL_SESSION_ID = "default";
 // Get QR code and status
 app.get("/setup/api/whatsapp-personal/status", requireSetupAuth, async (_req, res) => {
   try {
-    const qr = whatsappPersonal.getQrCode(WHATSAPP_PERSONAL_SESSION_ID);
-    const status = whatsappPersonal.getStatus(WHATSAPP_PERSONAL_SESSION_ID);
-    const clientInfo = await whatsappPersonal.getClientInfo(WHATSAPP_PERSONAL_SESSION_ID);
+    const wp = await getWhatsappPersonal();
+    const qr = wp.getQrCode(WHATSAPP_PERSONAL_SESSION_ID);
+    const status = wp.getStatus(WHATSAPP_PERSONAL_SESSION_ID);
+    const clientInfo = await wp.getClientInfo(WHATSAPP_PERSONAL_SESSION_ID);
 
     res.json({
       ok: true,
@@ -986,9 +998,10 @@ app.get("/setup/api/whatsapp-personal/status", requireSetupAuth, async (_req, re
 // Start/initialize WhatsApp Personal client
 app.post("/setup/api/whatsapp-personal/start", requireSetupAuth, async (req, res) => {
   try {
+    const wp = await getWhatsappPersonal();
     const webhookUrl = `https://${process.env.RAILWAY_PUBLIC_DOMAIN || req.headers.host || "localhost"}/webhook/whatsapp-personal`;
 
-    const result = await whatsappPersonal.createClient(
+    const result = await wp.createClient(
       WHATSAPP_PERSONAL_SESSION_ID,
       { webhookUrl },
       async (messageData) => {
@@ -1017,7 +1030,8 @@ app.post("/setup/api/whatsapp-personal/start", requireSetupAuth, async (req, res
 // Disconnect WhatsApp Personal client
 app.post("/setup/api/whatsapp-personal/stop", requireSetupAuth, async (_req, res) => {
   try {
-    const disconnected = await whatsappPersonal.disconnectClient(WHATSAPP_PERSONAL_SESSION_ID);
+    const wp = await getWhatsappPersonal();
+    const disconnected = await wp.disconnectClient(WHATSAPP_PERSONAL_SESSION_ID);
     res.json({ ok: true, disconnected });
   } catch (err) {
     res.status(500).json({ ok: false, error: String(err) });
@@ -1027,12 +1041,13 @@ app.post("/setup/api/whatsapp-personal/stop", requireSetupAuth, async (_req, res
 // Send a test message
 app.post("/setup/api/whatsapp-personal/send", requireSetupAuth, async (req, res) => {
   try {
+    const wp = await getWhatsappPersonal();
     const { to, message } = req.body || {};
     if (!to || !message) {
       return res.status(400).json({ ok: false, error: "Missing 'to' or 'message'" });
     }
 
-    const result = await whatsappPersonal.sendMessage(WHATSAPP_PERSONAL_SESSION_ID, to, message);
+    const result = await wp.sendMessage(WHATSAPP_PERSONAL_SESSION_ID, to, message);
     res.json({ ok: true, ...result });
   } catch (err) {
     res.status(500).json({ ok: false, error: String(err) });
@@ -1214,6 +1229,7 @@ app.use(async (req, res) => {
 
 const server = app.listen(PORT, "0.0.0.0", () => {
   console.log(`[wrapper] listening on :${PORT}`);
+  console.log(`[wrapper] healthz endpoint: http://0.0.0.0:${PORT}/setup/healthz`);
   console.log(`[wrapper] state dir: ${STATE_DIR}`);
   console.log(`[wrapper] workspace dir: ${WORKSPACE_DIR}`);
   console.log(`[wrapper] gateway token: ${OPENCLAW_GATEWAY_TOKEN ? "(set)" : "(missing)"}`);
@@ -1222,6 +1238,10 @@ const server = app.listen(PORT, "0.0.0.0", () => {
     console.warn("[wrapper] WARNING: SETUP_PASSWORD is not set; /setup will error.");
   }
   // Don't start gateway unless configured; proxy will ensure it starts.
+}).on("error", (err) => {
+  console.error(`[wrapper] FATAL: server.listen failed: ${err.message}`);
+  console.error(`[wrapper] This usually means the port is already in use or not available.`);
+  process.exit(1);
 });
 
 server.on("upgrade", async (req, socket, head) => {
