@@ -1,0 +1,21 @@
+version: "3.8"
+
+services:
+  signal-cli:
+    image: bbernhard/signal-cli-rest-api:latest
+    container_name: signal-rest-api
+    ports:
+      - "8080:8080"
+    volumes:
+      # Persist Signal account data
+      - signal_data:/home/.local/share/signal-cli
+    restart: unless-stopped
+    environment:
+      # Mode: native uses Java lib, json-server uses separate process
+      - MODE=json-server
+    # Optional: Add network mode if Signal needs to access host network
+    # network_mode: host
+
+volumes:
+  signal_data:
+    driver: local
