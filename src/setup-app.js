@@ -372,7 +372,11 @@
         body: JSON.stringify({ to: to, message: msg })
       })
         .then(function (j) {
-          waPersonalLog('Sent: ' + JSON.stringify(j));
+          if (j.ok) {
+            waPersonalLog('Sent successfully to ' + j.recipient);
+          } else {
+            waPersonalLog('Error: ' + (j.error || 'Unknown error'));
+          }
         })
         .catch(function (e) {
           waPersonalLog('Error: ' + String(e));
