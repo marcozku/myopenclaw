@@ -198,32 +198,27 @@ async function ensureGatewayRunning() {
     "loopback"
   ])]));
 
-  // Configure web channel to allow all connections without pairing
-  // This fixes "pairing required" errors when accessing via browser
-  // Since CLI config set may fail, directly edit the config file
+  // Clean up invalid channels.web configuration that causes startup errors
+  // OpenClaw doesn't recognize "web" as a valid channel ID
   try {
     const cfgPath = configPath();
-    let config = {};
-    try {
+    if (fs.existsSync(cfgPath)) {
       const content = fs.readFileSync(cfgPath, "utf8");
-      config = JSON.parse(content);
-    } catch {
-      // Config doesn't exist or is invalid, start fresh
+      const config = JSON.parse(content);
+
+      // Remove channels.web if it exists (causes "unknown channel id" error)
+      if (config.channels && config.channels.web) {
+        delete config.channels.web;
+        // Also remove empty channels object if nothing else is there
+        if (Object.keys(config.channels).length === 0) {
+          delete config.channels;
+        }
+        fs.writeFileSync(cfgPath, JSON.stringify(config, null, 2), { encoding: "utf8", mode: 0o600 });
+        console.log("[wrapper] cleaned up invalid channels.web config");
+      }
     }
-
-    // Ensure channels.web exists with dmPolicy: "all"
-    if (!config.channels) config.channels = {};
-    config.channels.web = {
-      enabled: true,
-      dmPolicy: "all"
-    };
-
-    // Write back to config
-    fs.mkdirSync(path.dirname(cfgPath), { recursive: true });
-    fs.writeFileSync(cfgPath, JSON.stringify(config, null, 2));
-    console.log("[wrapper] web channel configured: OK (direct file edit)");
   } catch (err) {
-    console.error("[wrapper] web channel configured: FAILED -", err.message);
+    // Ignore cleanup errors - non-critical
   }
 
   if (!gatewayStarting) {
