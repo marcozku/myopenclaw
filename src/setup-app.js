@@ -63,7 +63,17 @@
     opts.credentials = 'same-origin';
     return fetch(url, opts).then(function (res) {
       if (!res.ok) {
+        // Try to parse error response as JSON first
         return res.text().then(function (t) {
+          // Try to extract meaningful error message from JSON response
+          try {
+            const jsonErr = JSON.parse(t);
+            if (jsonErr.error) {
+              throw new Error('HTTP ' + res.status + ': ' + jsonErr.error);
+            }
+          } catch (_) {
+            // Not JSON or no error field, use text as-is
+          }
           throw new Error('HTTP ' + res.status + ': ' + (t || res.statusText));
         });
       }
