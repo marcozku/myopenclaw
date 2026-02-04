@@ -4,9 +4,13 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import dotenv from "dotenv";
 import express from "express";
 import httpProxy from "http-proxy";
 import * as tar from "tar";
+
+// Load .env file for local development (Railway sets env vars directly)
+dotenv.config();
 
 // Railway deployments sometimes inject PORT=3000 by default. We want the wrapper to
 // reliably listen on 8080 unless explicitly overridden.
