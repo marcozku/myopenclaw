@@ -207,9 +207,11 @@ export function getStatus(sessionId) {
 export async function sendMessage(sessionId, to, message) {
   const client = clients.get(sessionId);
   if (!client) {
+    console.error(`[whatsapp:${sessionId}] Send failed: client not found`);
     throw new Error("Client not found");
   }
   if (!client.isReady) {
+    console.error(`[whatsapp:${sessionId}] Send failed: client not ready (isReady=${client.isReady})`);
     throw new Error("Client not ready. Please scan QR code first.");
   }
 
@@ -220,8 +222,17 @@ export async function sendMessage(sessionId, to, message) {
     recipient = `${recipient}@c.us`;
   }
 
-  await client.sendMessage(recipient, message);
-  return { success: true, recipient, message };
+  console.log(`[whatsapp:${sessionId}] Sending message to ${recipient}`);
+  try {
+    await client.sendMessage(recipient, message);
+    console.log(`[whatsapp:${sessionId}] Message sent successfully`);
+    return { success: true, recipient, message };
+  } catch (err) {
+    console.error(`[whatsapp:${sessionId}] Send error:`, err);
+    // Extract meaningful error message
+    const errorMsg = err?.message || err?.toString?.() || String(err);
+    throw new Error(`Failed to send message: ${errorMsg}`);
+  }
 }
 
 /**
