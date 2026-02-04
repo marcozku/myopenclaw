@@ -7,6 +7,7 @@ This document describes how to set up various messaging channels with OpenClaw v
 ## Supported Channels
 
 - [WhatsApp Business](#whatsapp-business)
+- [WhatsApp Personal](#whatsapp-personal)
 - [Signal](#signal)
 - [Telegram](#telegram)
 - [Discord](#discord)
@@ -55,6 +56,63 @@ This document describes how to set up various messaging channels with OpenClaw v
 After setup, configure in Meta App:
 - **Webhook URL**: `https://your-domain/webhook/whatsapp`
 - **Verify Token**: Use the token shown in setup output
+
+---
+
+## WhatsApp Personal (Normal WhatsApp)
+
+### Overview
+
+Use your regular WhatsApp account without needing a Meta Business account or WhatsApp Business API. This uses `whatsapp-web.js` to connect via WhatsApp Web protocol.
+
+### Prerequisites
+
+- WhatsApp installed on your phone
+- Your phone must be connected to the internet
+- Node.js >= 22 (for Puppeteer/Chromium)
+
+### Setup via /setup
+
+1. Go to **"2d) Optional: WhatsApp Personal (Normal WhatsApp)"**
+2. Click **"Start WhatsApp Personal"**
+3. A QR code will appear
+4. Open WhatsApp on your phone:
+   - **Android**: Settings > Linked Devices > Link a Device
+   - **iOS**: Settings > Linked Devices > Link a Device
+5. Scan the QR code
+6. Wait for status to show **"ready"**
+
+### Testing
+
+1. Once connected, your account info will be displayed
+2. Send a test message:
+   - Enter a phone number (e.g., `+1234567890`)
+   - Enter a test message
+   - Click **"Send"**
+
+### Notes
+
+- Your session persists after restart (no need to rescan)
+- Your phone must be online to receive messages
+- Only one session per phone number
+- See [WHATSAPP_PERSONAL_SETUP.md](WHATSAPP_PERSONAL_SETUP.md) for detailed documentation
+
+### Raw Config Format
+
+```json5
+{
+  channels: {
+    "whatsapp-personal": {
+      enabled: true,
+      sessionId: "default",
+      groupPolicy: "allowlist",
+      dm: {
+        policy: "pairing"
+      }
+    }
+  }
+}
+```
 
 ---
 

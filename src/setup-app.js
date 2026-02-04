@@ -77,10 +77,6 @@
       var ver = j.openclawVersion ? (' | ' + j.openclawVersion) : '';
       setStatus((j.configured ? 'Configured - open /openclaw' : 'Not configured - run setup below') + ver);
       renderAuth(j.authGroups || []);
-      // If channels are unsupported, surface it for debugging.
-      if (j.channelsAddHelp && j.channelsAddHelp.indexOf('telegram') === -1) {
-        logEl.textContent += '\nNote: this openclaw build does not list telegram in `channels add --help`. Telegram auto-add will be skipped.\n';
-      }
 
       // Attempt to load config editor content if present.
       if (configReloadEl && configTextEl) {
@@ -252,6 +248,131 @@
       .then(function (t) { logEl.textContent += t + '\n'; return refreshStatus(); })
       .catch(function (e) { logEl.textContent += 'Error: ' + String(e) + '\n'; });
   };
+
+  // --- WhatsApp Personal (Normal WhatsApp) ---
+  var waPersonalStartBtn = document.getElementById('waPersonalStart');
+  var waPersonalStopBtn = document.getElementById('waPersonalStop');
+  var waPersonalRefreshBtn = document.getElementById('waPersonalRefresh');
+  var waPersonalStatusText = document.getElementById('waPersonalStatusText');
+  var waPersonalClientInfo = document.getElementById('waPersonalClientInfo');
+  var waPersonalQrContainer = document.getElementById('waPersonalQrContainer');
+  var waPersonalQr = document.getElementById('waPersonalQr');
+  var waPersonalTestTo = document.getElementById('waPersonalTestTo');
+  var waPersonalTestMessage = document.getElementById('waPersonalTestMessage');
+  var waPersonalSendTestBtn = document.getElementById('waPersonalSendTest');
+  var waPersonalOut = document.getElementById('waPersonalOut');
+
+  var waPersonalPollInterval = null;
+
+  function waPersonalLog(msg) {
+    if (waPersonalOut) {
+      waPersonalOut.textContent = msg + '\n' + waPersonalOut.textContent;
+    }
+  }
+
+  function waPersonalUpdateStatus(data) {
+    if (waPersonalStatusText) {
+      waPersonalStatusText.textContent = data.status || 'unknown';
+    }
+    if (data.clientInfo && waPersonalClientInfo) {
+      waPersonalClientInfo.textContent = 'Connected as: ' + data.clientInfo.pushName + ' (' + data.clientInfo.number + ')';
+    } else if (waPersonalClientInfo) {
+      waPersonalClientInfo.textContent = '';
+    }
+    if (data.authFailure) {
+      waPersonalLog('Auth failure: ' + data.authFailure);
+    }
+    if (data.qr && waPersonalQr) {
+      waPersonalQr.textContent = data.qr;
+      if (waPersonalQrContainer) waPersonalQrContainer.style.display = 'block';
+    }
+  }
+
+  function waPersonalRefreshStatus() {
+    return httpJson('/setup/api/whatsapp-personal/status')
+      .then(function (j) {
+        waPersonalUpdateStatus(j);
+        return j;
+      })
+      .catch(function (e) {
+        waPersonalLog('Error: ' + String(e));
+      });
+  }
+
+  function waPersonalStartPolling() {
+    if (waPersonalPollInterval) return;
+    waPersonalPollInterval = setInterval(function () {
+      waPersonalRefreshStatus();
+    }, 3000);
+  }
+
+  function waPersonalStopPolling() {
+    if (waPersonalPollInterval) {
+      clearInterval(waPersonalPollInterval);
+      waPersonalPollInterval = null;
+    }
+  }
+
+  if (waPersonalStartBtn) {
+    waPersonalStartBtn.onclick = function () {
+      waPersonalLog('Starting WhatsApp Personal...');
+      httpJson('/setup/api/whatsapp-personal/start', { method: 'POST' })
+        .then(function (j) {
+          waPersonalLog('Started: ' + (j.message || j.status));
+          waPersonalStartPolling();
+          return waPersonalRefreshStatus();
+        })
+        .catch(function (e) {
+          waPersonalLog('Error: ' + String(e));
+        });
+    };
+  }
+
+  if (waPersonalStopBtn) {
+    waPersonalStopBtn.onclick = function () {
+      waPersonalLog('Stopping WhatsApp Personal...');
+      waPersonalStopPolling();
+      httpJson('/setup/api/whatsapp-personal/stop', { method: 'POST' })
+        .then(function (j) {
+          waPersonalLog('Stopped: ' + (j.disconnected ? 'Disconnected' : 'Already stopped'));
+          if (waPersonalQrContainer) waPersonalQrContainer.style.display = 'none';
+          if (waPersonalStatusText) waPersonalStatusText.textContent = 'Stopped';
+          if (waPersonalClientInfo) waPersonalClientInfo.textContent = '';
+        })
+        .catch(function (e) {
+          waPersonalLog('Error: ' + String(e));
+        });
+    };
+  }
+
+  if (waPersonalRefreshBtn) {
+    waPersonalRefreshBtn.onclick = function () {
+      waPersonalRefreshStatus();
+    };
+  }
+
+  if (waPersonalSendTestBtn) {
+    waPersonalSendTestBtn.onclick = function () {
+      var to = waPersonalTestTo ? waPersonalTestTo.value.trim() : '';
+      var msg = waPersonalTestMessage ? waPersonalTestMessage.value.trim() : '';
+      if (!to || !msg) {
+        alert('Please enter both phone number and message');
+        return;
+      }
+      waPersonalLog('Sending test message to ' + to + '...');
+      httpJson('/setup/api/whatsapp-personal/send', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ to: to, message: msg })
+      })
+        .then(function (j) {
+          waPersonalLog('Sent: ' + JSON.stringify(j));
+        })
+        .catch(function (e) {
+          waPersonalLog('Error: ' + String(e));
+        });
+    };
+  }
 
   refreshStatus();
 })();

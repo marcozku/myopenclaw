@@ -8,6 +8,7 @@ import dotenv from "dotenv";
 import express from "express";
 import httpProxy from "http-proxy";
 import * as tar from "tar";
+import * as whatsappPersonal from "./channels/whatsapp-personal.js";
 
 // Load .env file for local development (Railway sets env vars directly)
 dotenv.config();
@@ -423,6 +424,40 @@ app.get("/setup", requireSetupAuth, (_req, res) => {
   </div>
 
   <div class="card">
+    <h2>2d) Optional: WhatsApp Personal (Normal WhatsApp)</h2>
+    <p class="muted">Use your regular WhatsApp account (no Business API required). Scan QR code to connect.</p>
+
+    <div style="margin-bottom: 1rem">
+      <button id="waPersonalStart" type="button" style="background:#16a34a">Start WhatsApp Personal</button>
+      <button id="waPersonalStop" type="button" style="background:#dc2626; margin-left:0.5rem">Stop</button>
+      <button id="waPersonalRefresh" type="button" style="background:#2563eb; margin-left:0.5rem">Refresh Status</button>
+    </div>
+
+    <div id="waPersonalStatus" style="background:#f5f5f5; padding:0.75rem; border-radius:8px; margin-bottom:1rem">
+      <div class="muted">Status: <span id="waPersonalStatusText">Not started</span></div>
+      <div id="waPersonalClientInfo" class="muted" style="margin-top:0.5rem"></div>
+    </div>
+
+    <div id="waPersonalQrContainer" style="display:none; margin-bottom:1rem">
+      <label>QR Code (Scan with WhatsApp)</label>
+      <pre id="waPersonalQr" style="background:#fff; padding:1rem; border:1px solid #ddd; border-radius:8px; font-size:10px; line-height:1.2; white-space:pre; overflow-x:auto"></pre>
+      <div class="muted">Open WhatsApp on your phone: Settings > Linked Devices > Link a Device</div>
+    </div>
+
+    <div style="margin-bottom:1rem">
+      <label>Send Test Message (optional)</label>
+      <div style="display:flex; gap:0.5rem">
+        <input id="waPersonalTestTo" type="text" placeholder="+1234567890" style="flex:1" />
+        <input id="waPersonalTestMessage" type="text" placeholder="Hello from OpenClaw!" style="flex:2" />
+        <button id="waPersonalSendTest" type="button" style="background:#0f172a">Send</button>
+      </div>
+      <div class="muted" style="margin-top:0.25rem">Send a test message to verify the connection.</div>
+    </div>
+
+    <div id="waPersonalOut" style="background:#f5f5f5; padding:0.5rem; border-radius:6px; font-size:0.9rem"></div>
+  </div>
+
+  <div class="card">
     <h2>3) Run onboarding</h2>
     <button id="run">Run setup</button>
     <button id="pairingApprove" style="background:#1f2937; margin-left:0.5rem">Approve pairing</button>
@@ -612,161 +647,128 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
     const channelsHelp = await runCmd(OPENCLAW_NODE, clawArgs(["channels", "add", "--help"]));
     const helpText = channelsHelp.output || "";
 
-    const supports = (name) => helpText.includes(name);
+    // Always write config directly - more reliable than checking CLI help
+    const setConfig = async (path, obj) => {
+      const set = await runCmd(
+        OPENCLAW_NODE,
+        clawArgs(["config", "set", "--json", path, JSON.stringify(obj)]),
+      );
+      const get = await runCmd(OPENCLAW_NODE, clawArgs(["config", "get", path]));
+      return { set, get };
+    };
 
     if (payload.telegramToken?.trim()) {
-      if (!supports("telegram")) {
-        extra += "\n[telegram] skipped (this openclaw build does not list telegram in `channels add --help`)\n";
-      } else {
-        // Avoid `channels add` here (it has proven flaky across builds); write config directly.
-        const token = payload.telegramToken.trim();
-        const cfgObj = {
-          enabled: true,
-          dmPolicy: "pairing",
-          botToken: token,
-          groupPolicy: "allowlist",
-          streamMode: "partial",
-        };
-        const set = await runCmd(
-          OPENCLAW_NODE,
-          clawArgs(["config", "set", "--json", "channels.telegram", JSON.stringify(cfgObj)]),
-        );
-        const get = await runCmd(OPENCLAW_NODE, clawArgs(["config", "get", "channels.telegram"]));
-        extra += `\n[telegram config] exit=${set.code} (output ${set.output.length} chars)\n${set.output || "(no output)"}`;
-        extra += `\n[telegram verify] exit=${get.code} (output ${get.output.length} chars)\n${get.output || "(no output)"}`;
-      }
+      const token = payload.telegramToken.trim();
+      const cfgObj = {
+        enabled: true,
+        dmPolicy: "pairing",
+        botToken: token,
+        groupPolicy: "allowlist",
+        streamMode: "partial",
+      };
+      const { set, get } = await setConfig("channels.telegram", cfgObj);
+      extra += `\n[telegram config] exit=${set.code} (output ${set.output.length} chars)\n${set.output || "(no output)"}`;
+      extra += `\n[telegram verify] exit=${get.code} (output ${get.output.length} chars)\n${get.output || "(no output)"}`;
     }
 
     if (payload.discordToken?.trim()) {
-      if (!supports("discord")) {
-        extra += "\n[discord] skipped (this openclaw build does not list discord in `channels add --help`)\n";
-      } else {
-        const token = payload.discordToken.trim();
-        const cfgObj = {
-          enabled: true,
-          token,
-          groupPolicy: "allowlist",
-          dm: {
-            policy: "pairing",
-          },
-        };
-        const set = await runCmd(
-          OPENCLAW_NODE,
-          clawArgs(["config", "set", "--json", "channels.discord", JSON.stringify(cfgObj)]),
-        );
-        const get = await runCmd(OPENCLAW_NODE, clawArgs(["config", "get", "channels.discord"]));
-        extra += `\n[discord config] exit=${set.code} (output ${set.output.length} chars)\n${set.output || "(no output)"}`;
-        extra += `\n[discord verify] exit=${get.code} (output ${get.output.length} chars)\n${get.output || "(no output)"}`;
-      }
+      const token = payload.discordToken.trim();
+      const cfgObj = {
+        enabled: true,
+        token,
+        groupPolicy: "allowlist",
+        dm: {
+          policy: "pairing",
+        },
+      };
+      const { set, get } = await setConfig("channels.discord", cfgObj);
+      extra += `\n[discord config] exit=${set.code} (output ${set.output.length} chars)\n${set.output || "(no output)"}`;
+      extra += `\n[discord verify] exit=${get.code} (output ${get.output.length} chars)\n${get.output || "(no output)"}`;
     }
 
     if (payload.slackBotToken?.trim() || payload.slackAppToken?.trim()) {
-      if (!supports("slack")) {
-        extra += "\n[slack] skipped (this openclaw build does not list slack in `channels add --help`)\n";
-      } else {
-        const cfgObj = {
-          enabled: true,
-          botToken: payload.slackBotToken?.trim() || undefined,
-          appToken: payload.slackAppToken?.trim() || undefined,
-        };
-        const set = await runCmd(
-          OPENCLAW_NODE,
-          clawArgs(["config", "set", "--json", "channels.slack", JSON.stringify(cfgObj)]),
-        );
-        const get = await runCmd(OPENCLAW_NODE, clawArgs(["config", "get", "channels.slack"]));
-        extra += `\n[slack config] exit=${set.code} (output ${set.output.length} chars)\n${set.output || "(no output)"}`;
-        extra += `\n[slack verify] exit=${get.code} (output ${get.output.length} chars)\n${get.output || "(no output)"}`;
-      }
+      const cfgObj = {
+        enabled: true,
+        botToken: payload.slackBotToken?.trim() || undefined,
+        appToken: payload.slackAppToken?.trim() || undefined,
+      };
+      const { set, get } = await setConfig("channels.slack", cfgObj);
+      extra += `\n[slack config] exit=${set.code} (output ${set.output.length} chars)\n${set.output || "(no output)"}`;
+      extra += `\n[slack verify] exit=${get.code} (output ${get.output.length} chars)\n${get.output || "(no output)"}`;
     }
 
     // WhatsApp Business API configuration
     if (payload.whatsappPhoneNumberId?.trim() || payload.whatsappAccessToken?.trim()) {
-      if (!supports("whatsapp")) {
-        extra += "\n[whatsapp] skipped (this openclaw build does not list whatsapp in `channels add --help`)\n";
-      } else {
-        const cfgObj = {
-          enabled: true,
-        };
+      const cfgObj = {
+        enabled: true,
+      };
 
-        if (payload.whatsappPhoneNumberId?.trim()) {
-          cfgObj.phoneNumberId = payload.whatsappPhoneNumberId.trim();
-        }
-        if (payload.whatsappAccessToken?.trim()) {
-          cfgObj.accessToken = payload.whatsappAccessToken.trim();
-        }
-        if (payload.whatsappBusinessAccountId?.trim()) {
-          cfgObj.businessAccountId = payload.whatsappBusinessAccountId.trim();
-        }
-
-        // Auto-generate verify token if not provided
-        const verifyToken = payload.whatsappVerifyToken?.trim() || crypto.randomBytes(16).toString("hex");
-        cfgObj.verifyToken = verifyToken;
-
-        // Set policies for WhatsApp
-        cfgObj.groupPolicy = "allowlist";
-        cfgObj.dm = {
-          policy: "pairing",
-        };
-
-        const set = await runCmd(
-          OPENCLAW_NODE,
-          clawArgs(["config", "set", "--json", "channels.whatsapp", JSON.stringify(cfgObj)]),
-        );
-        const get = await runCmd(OPENCLAW_NODE, clawArgs(["config", "get", "channels.whatsapp"]));
-        extra += `\n[whatsapp config] exit=${set.code} (output ${set.output.length} chars)\n${set.output || "(no output)"}`;
-        extra += `\n[whatsapp verify] exit=${get.code} (output ${get.output.length} chars)\n${get.output || "(no output)"}`;
-        extra += `\n[whatsapp] Verify token: ${verifyToken}\n`;
-        extra += `[whatsapp] Webhook URL: https://${process.env.RAILWAY_PUBLIC_DOMAIN || "your-domain"}/webhook/whatsapp\n`;
+      if (payload.whatsappPhoneNumberId?.trim()) {
+        cfgObj.phoneNumberId = payload.whatsappPhoneNumberId.trim();
       }
+      if (payload.whatsappAccessToken?.trim()) {
+        cfgObj.accessToken = payload.whatsappAccessToken.trim();
+      }
+      if (payload.whatsappBusinessAccountId?.trim()) {
+        cfgObj.businessAccountId = payload.whatsappBusinessAccountId.trim();
+      }
+
+      // Auto-generate verify token if not provided
+      const verifyToken = payload.whatsappVerifyToken?.trim() || crypto.randomBytes(16).toString("hex");
+      cfgObj.verifyToken = verifyToken;
+
+      // Set policies for WhatsApp
+      cfgObj.groupPolicy = "allowlist";
+      cfgObj.dm = {
+        policy: "pairing",
+      };
+
+      const { set, get } = await setConfig("channels.whatsapp", cfgObj);
+      extra += `\n[whatsapp config] exit=${set.code} (output ${set.output.length} chars)\n${set.output || "(no output)"}`;
+      extra += `\n[whatsapp verify] exit=${get.code} (output ${get.output.length} chars)\n${get.output || "(no output)"}`;
+      extra += `\n[whatsapp] Verify token: ${verifyToken}\n`;
+      extra += `[whatsapp] Webhook URL: https://${process.env.RAILWAY_PUBLIC_DOMAIN || "your-domain"}/webhook/whatsapp\n`;
     }
 
     // Signal configuration
     if (payload.signalApiUrl?.trim() || payload.signalPhoneNumber?.trim()) {
-      if (!supports("signal")) {
-        extra += "\n[signal] skipped (this openclaw build does not list signal in `channels add --help`)\n";
-      } else {
-        const cfgObj = {
-          enabled: true,
-        };
+      const cfgObj = {
+        enabled: true,
+      };
 
-        if (payload.signalApiUrl?.trim()) {
-          cfgObj.apiUrl = payload.signalApiUrl.trim();
-        }
-        if (payload.signalPhoneNumber?.trim()) {
-          cfgObj.phoneNumber = payload.signalPhoneNumber.trim();
-        }
-        if (payload.signalAccount?.trim()) {
-          cfgObj.account = payload.signalAccount.trim();
-        }
-        if (payload.signalSendAs?.trim()) {
-          cfgObj.sendAs = payload.signalSendAs.trim();
-        }
-        if (payload.signalRecipients?.trim()) {
-          // Split comma-separated recipients and trim each
-          cfgObj.recipients = payload.signalRecipients.trim().split(',').map(r => r.trim()).filter(r => r);
-        }
+      if (payload.signalApiUrl?.trim()) {
+        cfgObj.apiUrl = payload.signalApiUrl.trim();
+      }
+      if (payload.signalPhoneNumber?.trim()) {
+        cfgObj.phoneNumber = payload.signalPhoneNumber.trim();
+      }
+      if (payload.signalAccount?.trim()) {
+        cfgObj.account = payload.signalAccount.trim();
+      }
+      if (payload.signalSendAs?.trim()) {
+        cfgObj.sendAs = payload.signalSendAs.trim();
+      }
+      if (payload.signalRecipients?.trim()) {
+        // Split comma-separated recipients and trim each
+        cfgObj.recipients = payload.signalRecipients.trim().split(',').map(r => r.trim()).filter(r => r);
+      }
 
-        // Set policies for Signal
-        cfgObj.groupPolicy = "allowlist";
-        cfgObj.dm = {
-          policy: "pairing",
-        };
+      // Set policies for Signal
+      cfgObj.groupPolicy = "allowlist";
+      cfgObj.dm = {
+        policy: "pairing",
+      };
 
-        const set = await runCmd(
-          OPENCLAW_NODE,
-          clawArgs(["config", "set", "--json", "channels.signal", JSON.stringify(cfgObj)]),
-        );
-        const get = await runCmd(OPENCLAW_NODE, clawArgs(["config", "get", "channels.signal"]));
-        extra += `\n[signal config] exit=${set.code} (output ${set.output.length} chars)\n${set.output || "(no output)"}`;
-        extra += `\n[signal verify] exit=${get.code} (output ${get.output.length} chars)\n${get.output || "(no output)"}`;
+      const { set, get } = await setConfig("channels.signal", cfgObj);
+      extra += `\n[signal config] exit=${set.code} (output ${set.output.length} chars)\n${set.output || "(no output)"}`;
+      extra += `\n[signal verify] exit=${get.code} (output ${get.output.length} chars)\n${get.output || "(no output)"}`;
 
-        // Display configuration summary
-        extra += `[signal] API URL: ${cfgObj.apiUrl || "(not set)"}\n`;
-        extra += `[signal] Phone: ${cfgObj.phoneNumber || "(not set)"}\n`;
-        extra += `[signal] Account: ${cfgObj.account || "(default)"}\n`;
-        if (cfgObj.recipients && cfgObj.recipients.length > 0) {
-          extra += `[signal] Recipients: ${cfgObj.recipients.join(", ")}\n`;
-        }
+      // Display configuration summary
+      extra += `[signal] API URL: ${cfgObj.apiUrl || "(not set)"}\n`;
+      extra += `[signal] Phone: ${cfgObj.phoneNumber || "(not set)"}\n`;
+      extra += `[signal] Account: ${cfgObj.account || "(default)"}\n`;
+      if (cfgObj.recipients && cfgObj.recipients.length > 0) {
+        extra += `[signal] Recipients: ${cfgObj.recipients.join(", ")}\n`;
       }
     }
 
@@ -954,6 +956,93 @@ app.post("/setup/api/reset", requireSetupAuth, async (_req, res) => {
   } catch (err) {
     res.status(500).type("text/plain").send(String(err));
   }
+});
+
+// --- WhatsApp Personal (Non-Business) API ---
+
+// Default session ID for WhatsApp Personal
+const WHATSAPP_PERSONAL_SESSION_ID = "default";
+
+// Get QR code and status
+app.get("/setup/api/whatsapp-personal/status", requireSetupAuth, async (_req, res) => {
+  try {
+    const qr = whatsappPersonal.getQrCode(WHATSAPP_PERSONAL_SESSION_ID);
+    const status = whatsappPersonal.getStatus(WHATSAPP_PERSONAL_SESSION_ID);
+    const clientInfo = await whatsappPersonal.getClientInfo(WHATSAPP_PERSONAL_SESSION_ID);
+
+    res.json({
+      ok: true,
+      qr: qr || null,
+      status: status.status,
+      hasQr: status.hasQr,
+      authFailure: status.authFailure,
+      clientInfo: clientInfo || null,
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: String(err) });
+  }
+});
+
+// Start/initialize WhatsApp Personal client
+app.post("/setup/api/whatsapp-personal/start", requireSetupAuth, async (req, res) => {
+  try {
+    const webhookUrl = `https://${process.env.RAILWAY_PUBLIC_DOMAIN || req.headers.host || "localhost"}/webhook/whatsapp-personal`;
+
+    const result = await whatsappPersonal.createClient(
+      WHATSAPP_PERSONAL_SESSION_ID,
+      { webhookUrl },
+      async (messageData) => {
+        // Default message handler - log to console
+        console.log("[whatsapp-personal] Received message:", JSON.stringify(messageData, null, 2));
+
+        // Forward to OpenClaw gateway if configured
+        try {
+          await fetch(`${GATEWAY_TARGET}/webhook/whatsapp-personal`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-Gateway-Token": OPENCLAW_GATEWAY_TOKEN },
+            body: JSON.stringify(messageData),
+          });
+        } catch {
+          // Gateway might not handle this endpoint yet
+        }
+      }
+    );
+
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: String(err) });
+  }
+});
+
+// Disconnect WhatsApp Personal client
+app.post("/setup/api/whatsapp-personal/stop", requireSetupAuth, async (_req, res) => {
+  try {
+    const disconnected = await whatsappPersonal.disconnectClient(WHATSAPP_PERSONAL_SESSION_ID);
+    res.json({ ok: true, disconnected });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: String(err) });
+  }
+});
+
+// Send a test message
+app.post("/setup/api/whatsapp-personal/send", requireSetupAuth, async (req, res) => {
+  try {
+    const { to, message } = req.body || {};
+    if (!to || !message) {
+      return res.status(400).json({ ok: false, error: "Missing 'to' or 'message'" });
+    }
+
+    const result = await whatsappPersonal.sendMessage(WHATSAPP_PERSONAL_SESSION_ID, to, message);
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: String(err) });
+  }
+});
+
+// Public webhook endpoint for WhatsApp Personal messages (no auth, called by whatsapp-web.js locally)
+app.post("/webhook/whatsapp-personal", express.json({ type: "*/*" }), async (req, res) => {
+  // Just acknowledge receipt
+  res.json({ received: true });
 });
 
 app.get("/setup/export", requireSetupAuth, async (_req, res) => {
