@@ -200,15 +200,31 @@ async function ensureGatewayRunning() {
 
   // Configure web channel to allow all connections without pairing
   // This fixes "pairing required" errors when accessing via browser
-  const webConfigResult = await runCmd(OPENCLAW_NODE, clawArgs(["config", "set", "--json", "channels.web", JSON.stringify({
-    enabled: true,
-    dmPolicy: "all"
-  })]));
-  console.log("[wrapper] web channel configured:", webConfigResult.code === 0 ? "OK" : `FAILED (code=${webConfigResult.code})`);
+  // Since CLI config set may fail, directly edit the config file
+  try {
+    const cfgPath = configPath();
+    let config = {};
+    try {
+      const content = fs.readFileSync(cfgPath, "utf8");
+      config = JSON.parse(content);
+    } catch {
+      // Config doesn't exist or is invalid, start fresh
+    }
 
-  // Verify the config was set correctly
-  const verifyResult = await runCmd(OPENCLAW_NODE, clawArgs(["config", "get", "channels.web"]));
-  console.log("[wrapper] web channel config verify:", verifyResult.output || "(empty)");
+    // Ensure channels.web exists with dmPolicy: "all"
+    if (!config.channels) config.channels = {};
+    config.channels.web = {
+      enabled: true,
+      dmPolicy: "all"
+    };
+
+    // Write back to config
+    fs.mkdirSync(path.dirname(cfgPath), { recursive: true });
+    fs.writeFileSync(cfgPath, JSON.stringify(config, null, 2));
+    console.log("[wrapper] web channel configured: OK (direct file edit)");
+  } catch (err) {
+    console.error("[wrapper] web channel configured: FAILED -", err.message);
+  }
 
   if (!gatewayStarting) {
     gatewayStarting = (async () => {
