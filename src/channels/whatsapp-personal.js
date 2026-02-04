@@ -39,7 +39,13 @@ export async function createClient(sessionId, config = {}, onMessage = null) {
   ensureSessionsDir();
 
   if (clients.has(sessionId)) {
-    return { success: true, status: "ready", message: "Client already exists" };
+    const client = clients.get(sessionId);
+    // Return actual status instead of claiming it's ready
+    return {
+      success: true,
+      status: client.isReady ? "ready" : "initializing",
+      message: client.isReady ? "Client already exists and is ready" : "Client already exists. Scan QR code if needed."
+    };
   }
 
   const clientOptions = {
