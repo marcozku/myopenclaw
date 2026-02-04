@@ -663,6 +663,18 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
     await runCmd(OPENCLAW_NODE, clawArgs(["config", "set", "gateway.bind", "loopback"]));
     await runCmd(OPENCLAW_NODE, clawArgs(["config", "set", "gateway.port", String(INTERNAL_GATEWAY_PORT)]));
 
+    // Configure trusted proxies for Railway (and similar platforms) so gateway correctly
+    // identifies local connections when behind a reverse proxy
+    await runCmd(OPENCLAW_NODE, clawArgs(["config", "set", "--json", "gateway.trustedProxies", JSON.stringify([
+      "127.0.0.1",
+      "::1",
+      "link-local",
+      "unix:",
+      // Railway's proxy IPs
+      "100.64.0.0/10",
+      "1.64.59.63"
+    ])]));
+
     const channelsHelp = await runCmd(OPENCLAW_NODE, clawArgs(["channels", "add", "--help"]));
     const helpText = channelsHelp.output || "";
 
