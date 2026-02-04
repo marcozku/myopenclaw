@@ -388,6 +388,41 @@ app.get("/setup", requireSetupAuth, (_req, res) => {
   </div>
 
   <div class="card">
+    <h2>2c) Optional: Signal</h2>
+    <p class="muted">Configure Signal messaging integration via signal-cli REST API.</p>
+
+    <label>Signal-cli REST API URL (optional)</label>
+    <input id="signalApiUrl" type="text" placeholder="http://localhost:8080" />
+    <div class="muted" style="margin-top: 0.25rem">
+      The URL of your signal-cli REST API instance. Can be local or remote.
+    </div>
+
+    <label>Signal Phone Number (optional)</label>
+    <input id="signalPhoneNumber" type="text" placeholder="+1234567890" />
+    <div class="muted" style="margin-top: 0.25rem">
+      Your Signal phone number in E.164 format (with + prefix).
+    </div>
+
+    <label>Signal Account (optional)</label>
+    <input id="signalAccount" type="text" placeholder="+1234567890" />
+    <div class="muted" style="margin-top: 0.25rem">
+      The signal-cli account to use. Defaults to phone number if not specified.
+    </div>
+
+    <label>Send as (optional)</label>
+    <input id="signalSendAs" type="text" placeholder="+1234567890" />
+    <div class="muted" style="margin-top: 0.25rem">
+      The number to send messages as. Useful for groups with multiple numbers.
+    </div>
+
+    <label>Message Recipients (optional)</label>
+    <input id="signalRecipients" type="text" placeholder="+1234567890,+9876543210" />
+    <div class="muted" style="margin-top: 0.25rem">
+      Comma-separated list of allowed recipients. Leave empty for open access (not recommended).
+    </div>
+  </div>
+
+  <div class="card">
     <h2>3) Run onboarding</h2>
     <button id="run">Run setup</button>
     <button id="pairingApprove" style="background:#1f2937; margin-left:0.5rem">Approve pairing</button>
@@ -685,6 +720,56 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
       }
     }
 
+    // Signal configuration
+    if (payload.signalApiUrl?.trim() || payload.signalPhoneNumber?.trim()) {
+      if (!supports("signal")) {
+        extra += "\n[signal] skipped (this openclaw build does not list signal in `channels add --help`)\n";
+      } else {
+        const cfgObj = {
+          enabled: true,
+        };
+
+        if (payload.signalApiUrl?.trim()) {
+          cfgObj.apiUrl = payload.signalApiUrl.trim();
+        }
+        if (payload.signalPhoneNumber?.trim()) {
+          cfgObj.phoneNumber = payload.signalPhoneNumber.trim();
+        }
+        if (payload.signalAccount?.trim()) {
+          cfgObj.account = payload.signalAccount.trim();
+        }
+        if (payload.signalSendAs?.trim()) {
+          cfgObj.sendAs = payload.signalSendAs.trim();
+        }
+        if (payload.signalRecipients?.trim()) {
+          // Split comma-separated recipients and trim each
+          cfgObj.recipients = payload.signalRecipients.trim().split(',').map(r => r.trim()).filter(r => r);
+        }
+
+        // Set policies for Signal
+        cfgObj.groupPolicy = "allowlist";
+        cfgObj.dm = {
+          policy: "pairing",
+        };
+
+        const set = await runCmd(
+          OPENCLAW_NODE,
+          clawArgs(["config", "set", "--json", "channels.signal", JSON.stringify(cfgObj)]),
+        );
+        const get = await runCmd(OPENCLAW_NODE, clawArgs(["config", "get", "channels.signal"]));
+        extra += `\n[signal config] exit=${set.code} (output ${set.output.length} chars)\n${set.output || "(no output)"}`;
+        extra += `\n[signal verify] exit=${get.code} (output ${get.output.length} chars)\n${get.output || "(no output)"}`;
+
+        // Display configuration summary
+        extra += `[signal] API URL: ${cfgObj.apiUrl || "(not set)"}\n`;
+        extra += `[signal] Phone: ${cfgObj.phoneNumber || "(not set)"}\n`;
+        extra += `[signal] Account: ${cfgObj.account || "(default)"}\n`;
+        if (cfgObj.recipients && cfgObj.recipients.length > 0) {
+          extra += `[signal] Recipients: ${cfgObj.recipients.join(", ")}\n`;
+        }
+      }
+    }
+
     // Apply changes immediately.
     await restartGateway();
   }
@@ -719,6 +804,7 @@ app.get("/setup/api/debug", requireSetupAuth, async (_req, res) => {
       version: v.output.trim(),
       channelsAddHelpIncludesTelegram: help.output.includes("telegram"),
       channelsAddHelpIncludesWhatsapp: help.output.includes("whatsapp"),
+      channelsAddHelpIncludesSignal: help.output.includes("signal"),
     },
   });
 });

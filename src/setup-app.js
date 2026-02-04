@@ -104,7 +104,12 @@
       whatsappPhoneNumberId: document.getElementById('whatsappPhoneNumberId').value,
       whatsappAccessToken: document.getElementById('whatsappAccessToken').value,
       whatsappBusinessAccountId: document.getElementById('whatsappBusinessAccountId').value,
-      whatsappVerifyToken: document.getElementById('whatsappVerifyToken').value
+      whatsappVerifyToken: document.getElementById('whatsappVerifyToken').value,
+      signalApiUrl: document.getElementById('signalApiUrl').value,
+      signalPhoneNumber: document.getElementById('signalPhoneNumber').value,
+      signalAccount: document.getElementById('signalAccount').value,
+      signalSendAs: document.getElementById('signalSendAs').value,
+      signalRecipients: document.getElementById('signalRecipients').value
     };
 
     logEl.textContent = 'Running...\n';
