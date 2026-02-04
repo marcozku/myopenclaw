@@ -200,10 +200,15 @@ async function ensureGatewayRunning() {
 
   // Configure web channel to allow all connections without pairing
   // This fixes "pairing required" errors when accessing via browser
-  await runCmd(OPENCLAW_NODE, clawArgs(["config", "set", "--json", "channels.web", JSON.stringify({
+  const webConfigResult = await runCmd(OPENCLAW_NODE, clawArgs(["config", "set", "--json", "channels.web", JSON.stringify({
     enabled: true,
     dmPolicy: "all"
   })]));
+  console.log("[wrapper] web channel configured:", webConfigResult.code === 0 ? "OK" : `FAILED (code=${webConfigResult.code})`);
+
+  // Verify the config was set correctly
+  const verifyResult = await runCmd(OPENCLAW_NODE, clawArgs(["config", "get", "channels.web"]));
+  console.log("[wrapper] web channel config verify:", verifyResult.output || "(empty)");
 
   if (!gatewayStarting) {
     gatewayStarting = (async () => {
@@ -952,12 +957,28 @@ app.post("/setup/api/console/run", requireSetupAuth, async (req, res) => {
       return res.status(r.code === 0 ? 200 : 500).json({ ok: r.code === 0, output: redactSecrets(r.output) });
     }
     if (cmd === "openclaw.logs.tail") {
+      // Try to read logs directly from the state directory, or use 'logs' command without --tail
       const lines = Math.max(50, Math.min(1000, Number.parseInt(arg || "200", 10) || 200));
-      const r = await runCmd(OPENCLAW_NODE, clawArgs(["logs", "--tail", String(lines)]));
+      const logPath = path.join(STATE_DIR, "logs", "gateway.log");
+      try {
+        if (fs.existsSync(logPath)) {
+          const logContent = fs.readFileSync(logPath, "utf8");
+          const logLines = logContent.split("\n");
+          const tailLines = logLines.slice(-lines);
+          return res.json({ ok: true, output: tailLines.join("\n") });
+        }
+      } catch {
+        // Fall through to CLI command
+      }
+      // If no log file, try the logs command (some versions may support it differently)
+      const r = await runCmd(OPENCLAW_NODE, clawArgs(["logs"]));
       return res.status(r.code === 0 ? 200 : 500).json({ ok: r.code === 0, output: redactSecrets(r.output) });
     }
     if (cmd === "openclaw.config.get") {
-      if (!arg) return res.status(400).json({ ok: false, error: "Missing config path" });
+      if (!arg) {
+        // Show helpful message when no path is provided
+        return res.status(200).json({ ok: true, output: "Usage: Provide a config path to query.\nExamples:\n- gateway.port\n- channels.web\n- channels.telegram\n\nOr use the Config editor below to view/edit the full config." });
+      }
       const r = await runCmd(OPENCLAW_NODE, clawArgs(["config", "get", arg]));
       return res.status(r.code === 0 ? 200 : 500).json({ ok: r.code === 0, output: redactSecrets(r.output) });
     }
