@@ -290,7 +290,9 @@ app.get("/setup", requireSetupAuth, (_req, res) => {
     <h2>Status</h2>
     <div id="status">Loading...</div>
     <div style="margin-top: 0.75rem">
-      <a href="/openclaw" target="_blank">Open OpenClaw UI</a>
+      <a href="/setup/tokenized" target="_blank" style="background:#0070f3; color:white; padding:0.4rem 0.8rem; border-radius:6px; text-decoration:none; font-weight:600">Open OpenClaw UI (Auto-Auth)</a>
+      &nbsp;
+      <a href="/openclaw" target="_blank">Open OpenClaw UI (Manual)</a>
       &nbsp;|&nbsp;
       <a href="/setup/export" target="_blank">Download backup (.tar.gz)</a>
     </div>
@@ -1293,6 +1295,18 @@ app.post("/setup/import", requireSetupAuth, async (req, res) => {
   }
 });
 
+// Tokenized dashboard endpoint - auto-include token for seamless auth
+app.get("/setup/tokenized", (_req, res) => {
+  if (!isConfigured()) {
+    return res.status(400).type("text/plain").send("Gateway not configured yet");
+  }
+  if (!OPENCLAW_GATEWAY_TOKEN) {
+    return res.status(500).type("text/plain").send("Gateway token not set");
+  }
+  // Redirect to Control UI with token in query string
+  return res.redirect(`/openclaw/?token=${encodeURIComponent(OPENCLAW_GATEWAY_TOKEN)}`);
+});
+
 // Proxy everything else to the gateway.
 const proxy = httpProxy.createProxyServer({
   target: GATEWAY_TARGET,
@@ -1316,6 +1330,11 @@ app.use(async (req, res) => {
     } catch (err) {
       return res.status(503).type("text/plain").send(`Gateway not ready: ${String(err)}`);
     }
+  }
+
+  // For root path without token, redirect to tokenized version for seamless auth
+  if (req.path === "/" && !req.query.token && OPENCLAW_GATEWAY_TOKEN) {
+    return res.redirect(`/?token=${encodeURIComponent(OPENCLAW_GATEWAY_TOKEN)}`);
   }
 
   return proxy.web(req, res, { target: GATEWAY_TARGET });
